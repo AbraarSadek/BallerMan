@@ -1,0 +1,25 @@
+behaviors:
+  BlockAgent:
+    trainer_type: ppo
+    hyperparameters:
+      batch_size: 2048
+      buffer_size: 40960  # Larger buffer: body + arm + jump is a harder task
+      learning_rate: 2.5e-4
+      beta: 5.0e-3        # Entropy: encourage exploring jump timing and arm angles
+      epsilon: 0.2
+      lambd: 0.95
+      num_epoch: 3
+      learning_rate_schedule: linear
+    network_settings:
+      normalize: true     # Critical: body velocity, positions, angles all different scales
+      hidden_units: 512   # Larger network for the more complex motor task
+      num_layers: 3
+    reward_signals:
+      extrinsic:
+        gamma: 0.99
+        strength: 1.0
+    max_steps: 15000000   # Body + arm + jump coordination needs significantly more steps
+    time_horizon: 256     # Longer horizon captures full trajectory from throw to block attempt
+    summary_freq: 20000
+    keep_checkpoints: 5
+    checkpoint_interval: 200000
