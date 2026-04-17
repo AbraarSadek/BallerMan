@@ -204,21 +204,51 @@ public class ThrowAgent : Agent
         ballRigidbody.isKinematic    = false;
         ballRigidbody.linearVelocity = releaseVelocity * throwBoostMultiplier;
 
-        Vector3 toHoop    = (hoopTransform.position - handTransform.position).normalized;
-        float   alignment = Mathf.Clamp01(Vector3.Dot(releaseVelocity.normalized, toHoop));
-        AddReward(alignment * 0.1f);
-
-        // Reward upward arc: ball must rise above hoop level to score, so reward positive Y
+        // Small arc bonus at release — encourages upward throws needed to reach the hoop
         float arcBonus = Mathf.Clamp01(releaseVelocity.normalized.y) * 0.05f;
         AddReward(arcBonus);
 
         envController.NotifyThrowOccurred();
     }
 
+    /// <summary>
+    /// Proximity reward: exponential falloff from hoop. Max ~1.0 when ball passes through,
+    /// decays smoothly with distance so every improvement in aim is rewarded.
+    /// Only given if ball was actually thrown.
+    /// </summary>
+    private void GiveProximityReward()
+    {
+        if (!_hasReleased) return;
+        float closest = envController.ClosestDistToHoop;
+        if (closest >= float.MaxValue) return;
+        // exp(-d * 0.5): d=0 → 1.0, d=1m → 0.61, d=2m → 0.37, d=5m → 0.08
+        AddReward(Mathf.Exp(-closest * 0.5f));
+    }
+
     // ---- Callbacks from BasketballEnvController ----
 
-    public void OnScored()          { AddReward(1.0f);   EndEpisode(); }
-    public void OnBallOutOfBounds() { AddReward(-0.1f);  EndEpisode(); }
-    public void OnBlockHit()        { AddReward(-0.3f); }
-    public void OnEpisodeTimeout()  { AddReward(-0.05f); EndEpisode(); }
+    public void OnScored()
+    {
+        GiveProximityReward();
+        AddReward(2f);   // Extra bonus for actually going through the hoop
+        EndEpisode();
+    }
+
+    public void OnBallOutOfBounds()
+    {
+        GiveProximityReward();
+        EndEpisode();
+    }
+
+    public void OnBlockHit()
+    {
+        GiveProximityReward();
+        AddReward(-0.1f);  // Penalty for being blocked
+    }
+
+    public void OnEpisodeTimeout()
+    {
+        GiveProximityReward();
+        EndEpisode();
+    }
 }

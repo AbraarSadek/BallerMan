@@ -26,10 +26,14 @@ public class BasketballEnvController : MonoBehaviour
     public float outOfBoundsRadius = 20f;
 
     [Header("Ground Detection")]
-    [Tooltip("World Y of the court floor. Set this to match your Plane's world Y position.")]
-    public float courtFloorY = 0f;
-    [Tooltip("Ball must drop within this margin of courtFloorY (after throw) to trigger ground-hit end.")]
+    [Tooltip("Drag the court floor (Plane) Transform here — its Y position is used as the floor level.")]
+    public Transform courtFloor;
+    [Tooltip("Ball must drop within this margin above the floor Y (after throw) to trigger ground-hit end.")]
     public float groundMargin = 0.4f;
+
+    [Header("Diverge Detection")]
+    [Tooltip("If ball moves this many metres further from hoop than its closest approach, end the episode.")]
+    public float divergeThreshold = 2.5f;
 
     [Header("Episode Settings")]
     public float maxEpisodeDurationSeconds = 10f;
@@ -37,6 +41,10 @@ public class BasketballEnvController : MonoBehaviour
     private float _episodeStartTime;
     private bool _throwHasOccurred;
     private bool _episodeEnding;
+    private float _closestDistToHoop;
+
+    /// <summary>Minimum distance the ball has reached from the hoop this episode (set after throw).</summary>
+    public float ClosestDistToHoop => _closestDistToHoop;
 
     private void Start()
     {
@@ -54,19 +62,35 @@ public class BasketballEnvController : MonoBehaviour
     {
         if (_episodeEnding) return;
 
-        Vector3 ballPos = ballRigidbody.transform.position;
-        bool outOfBounds = ballPos.y < outOfBoundsY ||
-                           new Vector2(ballPos.x, ballPos.z).magnitude > outOfBoundsRadius;
+        Vector3 ballPos   = ballRigidbody.transform.position;
+        Vector3 envCenter = transform.position;
+        Vector3 hoopPos   = hoopTrigger.transform.position;
 
-        // End episode early if ball hits the court floor after being thrown —
-        // no need to wait out the full timeout for a clearly-failed throw.
-        bool hitGround = _throwHasOccurred &&
-                         ballPos.y <= courtFloorY + groundMargin &&
-                         ballRigidbody.linearVelocity.y <= 0f;
+        bool outOfBounds = ballPos.y < outOfBoundsY ||
+                           new Vector2(ballPos.x - envCenter.x, ballPos.z - envCenter.z).magnitude > outOfBoundsRadius;
+
+        bool hitGround = false;
+        bool diverging  = false;
+
+        if (_throwHasOccurred)
+        {
+            // Track closest approach for proximity reward
+            float dist = Vector3.Distance(ballPos, hoopPos);
+            if (dist < _closestDistToHoop)
+                _closestDistToHoop = dist;
+
+            // Ground hit: ball reached floor level — no velocity check so rolling is caught too
+            float floorY = courtFloor != null ? courtFloor.position.y : 0f;
+            hitGround = ballPos.y <= floorY + groundMargin;
+
+            // Diverging: ball is significantly further from hoop than its closest approach,
+            // meaning it has peaked and is heading away — episode is over regardless of timeout
+            diverging = dist > _closestDistToHoop + divergeThreshold;
+        }
 
         bool timedOut = Time.time - _episodeStartTime > maxEpisodeDurationSeconds;
 
-        if (outOfBounds || hitGround || timedOut)
+        if (outOfBounds || hitGround || diverging || timedOut)
         {
             _episodeEnding = true;
             if (_throwHasOccurred)
@@ -84,9 +108,10 @@ public class BasketballEnvController : MonoBehaviour
 
     public void StartNewEpisode()
     {
-        _throwHasOccurred = false;
-        _episodeEnding = false;
-        _episodeStartTime = Time.time;
+        _throwHasOccurred    = false;
+        _episodeEnding       = false;
+        _episodeStartTime    = Time.time;
+        _closestDistToHoop   = float.MaxValue;
 
         hoopTrigger.ResetForNewEpisode();
         ResetBall();
