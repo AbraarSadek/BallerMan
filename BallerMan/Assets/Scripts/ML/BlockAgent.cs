@@ -35,10 +35,14 @@ public class BlockAgent : Agent
     [Header("Body Movement")]
     [Tooltip("Maximum lateral (XZ) speed in metres per second.")]
     public float maxBodyMoveSpeed = 4f;
-    [Tooltip("World-space XZ centre the agent should stay near (set to blocker spawn position).")]
-    public Vector3 defendCenter;
-    [Tooltip("XZ radius beyond which the agent is penalised and clamped.")]
-    public float defendRadius = 2f;
+
+    [Header("Thrower Avoidance")]
+    [Tooltip("The ThrowAgent transform — block agent is penalised for getting closer than minDistToThrower.")]
+    public Transform throwerTransform;
+    [Tooltip("Minimum allowed distance from the thrower before penalty kicks in.")]
+    public float minDistToThrower = 1.5f;
+    [Tooltip("Reward applied per step while inside minDistToThrower.")]
+    public float throwerProximityPenalty = -0.02f;
 
     [Header("Jump Settings")]
     [Tooltip("Upward velocity applied when jumping.")]
@@ -61,17 +65,15 @@ public class BlockAgent : Agent
 
     // Reset state captured at Initialize
     private Vector3 _bodyRestPosition;
+    private Quaternion _bodyRestRotation;
     private Quaternion _armRestLocalRotation;
 
     public override void Initialize()
     {
         _bodyRestPosition     = transform.position;
+        _bodyRestRotation     = transform.rotation;
         _groundY              = transform.position.y;
         _armRestLocalRotation = armTransform.localRotation;
-
-        // Defend centre defaults to spawn position if not set in inspector
-        if (defendCenter == Vector3.zero)
-            defendCenter = _bodyRestPosition;
     }
 
     public override void OnEpisodeBegin()
@@ -79,9 +81,9 @@ public class BlockAgent : Agent
         _ballHasBeenReleased = false;
         _blockHandled = false;
 
-        // Reset body position directly — no Rigidbody needed
+        // Reset body position and rotation to initial scene placement
         transform.position = _bodyRestPosition;
-        transform.rotation = Quaternion.identity;
+        transform.rotation = _bodyRestRotation;
 
         // Reset jump state
         _jumpVelocityY = 0f;
@@ -104,28 +106,29 @@ public class BlockAgent : Agent
     ///   [21]   Step fraction remaining (1)
     ///   [22]   Ball speed scalar (1)
     ///   [23]   Ball Y delta relative to hoop Y (1)
-    ///   [24-26] Body position relative to defend centre (3)
+    ///   [24-26] Body position relative to thrower (3)
     /// </summary>
     public override void CollectObservations(VectorSensor sensor)
     {
-        Vector3 handPos = handTransform.position;
-        Vector3 ballPos = ballRigidbody.transform.position;
-        Vector3 hoopPos = hoopTransform.position;
-        Vector3 bodyPos = transform.position;
+        Vector3 handPos     = handTransform.position;
+        Vector3 ballPos     = ballRigidbody.transform.position;
+        Vector3 hoopPos     = hoopTransform.position;
+        Vector3 bodyPos     = transform.position;
+        Vector3 throwerPos  = throwerTransform != null ? throwerTransform.position : bodyPos;
 
         // [0-2] Body velocity approximation — use jump velocity on Y, zeros on XZ
-        sensor.AddObservation(new Vector3(0f, _jumpVelocityY, 0f));              // 3
-        sensor.AddObservation(_isGrounded ? 1f : 0f);                             // 1
-        sensor.AddObservation(armTransform.localRotation);                         // 4
-        sensor.AddObservation(handPos);                                            // 3
-        sensor.AddObservation(ballPos - handPos);                                  // 3
-        sensor.AddObservation(ballRigidbody.linearVelocity);                      // 3
-        sensor.AddObservation(hoopPos - bodyPos);                                  // 3
-        sensor.AddObservation(Vector3.Distance(ballPos, hoopPos));                 // 1
+        sensor.AddObservation(new Vector3(0f, _jumpVelocityY, 0f));                // 3
+        sensor.AddObservation(_isGrounded ? 1f : 0f);                               // 1
+        sensor.AddObservation(armTransform.localRotation);                           // 4
+        sensor.AddObservation(handPos);                                              // 3
+        sensor.AddObservation(ballPos - handPos);                                    // 3
+        sensor.AddObservation(ballRigidbody.linearVelocity);                        // 3
+        sensor.AddObservation(hoopPos - bodyPos);                                    // 3
+        sensor.AddObservation(Vector3.Distance(ballPos, hoopPos));                   // 1
         sensor.AddObservation(MaxStep > 0 ? 1f - StepCount / (float)MaxStep : 0f); // 1
-        sensor.AddObservation(ballRigidbody.linearVelocity.magnitude);            // 1
-        sensor.AddObservation(ballPos.y - hoopPos.y);                              // 1
-        sensor.AddObservation(bodyPos - defendCenter);                             // 3
+        sensor.AddObservation(ballRigidbody.linearVelocity.magnitude);              // 1
+        sensor.AddObservation(ballPos.y - hoopPos.y);                                // 1
+        sensor.AddObservation(bodyPos - throwerPos);                                 // 3 — distance/dir to thrower
         // Total: 27
     }
 
@@ -142,14 +145,12 @@ public class BlockAgent : Agent
         pos.x += moveX * maxBodyMoveSpeed * Time.fixedDeltaTime;
         pos.z += moveZ * maxBodyMoveSpeed * Time.fixedDeltaTime;
 
-        // Hard-clamp XZ within defend radius
-        Vector2 xzOffset = new Vector2(pos.x - defendCenter.x, pos.z - defendCenter.z);
-        if (xzOffset.magnitude > defendRadius)
+        // --- Thrower proximity penalty — discourages crowding the thrower ---
+        if (throwerTransform != null)
         {
-            xzOffset = xzOffset.normalized * defendRadius;
-            pos.x = defendCenter.x + xzOffset.x;
-            pos.z = defendCenter.z + xzOffset.y;
-            AddReward(-0.005f);
+            float distToThrower = Vector3.Distance(pos, throwerTransform.position);
+            if (distToThrower < minDistToThrower)
+                AddReward(throwerProximityPenalty);
         }
 
         // --- Manual jump physics ---

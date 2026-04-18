@@ -14,11 +14,8 @@ using UnityEngine.InputSystem;
 ///   └── Arm   (armTransform — rotates pitch/yaw/roll each step)
 ///       └── Hand  (handTransform — ball attaches here)
 ///
-/// The Hand child does NOT need a Rigidbody.
-/// The Ball Rigidbody is set kinematic while held, non-kinematic on release.
-///
-/// Observation space: 29 floats
-/// Action space: 5 continuous (pitch, yaw, roll, release, jump)
+/// Observation space: 31 floats
+/// Action space: 7 continuous (bodyX, bodyZ, pitch, yaw, roll, release, jump)
 /// </summary>
 public class ThrowAgent : Agent
 {
@@ -28,6 +25,16 @@ public class ThrowAgent : Agent
     public Transform handTransform;
     public Rigidbody ballRigidbody;
     public Transform hoopTransform;
+
+    [Header("Body Movement")]
+    [Tooltip("Maximum lateral (XZ) speed in metres per second.")]
+    public float maxBodyMoveSpeed = 3f;
+    [Tooltip("Agent is penalised per step when further than this from its episode spawn point.")]
+    public float moveRadius = 3f;
+
+    [Header("Spawn Randomisation")]
+    [Tooltip("Each episode the agent spawns at a random point within this radius of its rest position.")]
+    public float spawnRadius = 2f;
 
     [Header("Arm Settings")]
     public float maxArmSpeed = 360f;
@@ -57,6 +64,9 @@ public class ThrowAgent : Agent
     private Vector3 _armRestLocalPosition;
     private Quaternion _armRestLocalRotation;
 
+    // Per-episode spawn (varies each episode within spawnRadius)
+    private Vector3 _episodeSpawnPosition;
+
     public override void Initialize()
     {
         _bodyRestPosition     = transform.position;
@@ -67,11 +77,14 @@ public class ThrowAgent : Agent
 
     public override void OnEpisodeBegin()
     {
-        _hasBall = true;
+        _hasBall     = true;
         _hasReleased = false;
 
-        // Reset body position directly — no Rigidbody needed
-        transform.position = _bodyRestPosition;
+        // Random spawn within spawnRadius of the rest position (XZ only)
+        Vector2 offset = Random.insideUnitCircle * spawnRadius;
+        _episodeSpawnPosition = _bodyRestPosition + new Vector3(offset.x, 0f, offset.y);
+
+        transform.position = _episodeSpawnPosition;
         transform.rotation = Quaternion.identity;
 
         // Reset jump state
@@ -83,7 +96,6 @@ public class ThrowAgent : Agent
         armTransform.localRotation = _armRestLocalRotation;
 
         // Reset ball — must be non-kinematic before zeroing velocity
-        // (ball may still be kinematic if episode ended before throw)
         ballRigidbody.isKinematic     = false;
         ballRigidbody.transform.SetParent(null);
         ballRigidbody.linearVelocity  = Vector3.zero;
@@ -97,20 +109,21 @@ public class ThrowAgent : Agent
     }
 
     /// <summary>
-    /// 29 floats total:
-    ///   [0-2]  Ball position relative to hand (3)
-    ///   [3-5]  Ball linearVelocity (3)
-    ///   [6-8]  Hand world position (3)
-    ///   [9-12] Arm local rotation quaternion (4)
+    /// 31 floats total:
+    ///   [0-2]   Ball position relative to hand (3)
+    ///   [3-5]   Ball linearVelocity (3)
+    ///   [6-8]   Hand world position (3)
+    ///   [9-12]  Arm local rotation quaternion (4)
     ///   [13-15] Hoop position relative to agent root (3)
     ///   [16-18] Hoop direction normalized from hand (3)
-    ///   [19]   Hoop distance from hand (1)
-    ///   [20]   Step fraction (1)
-    ///   [21]   _hasReleased flag (1)
+    ///   [19]    Hoop distance from hand (1)
+    ///   [20]    Step fraction (1)
+    ///   [21]    _hasReleased flag (1)
     ///   [22-24] Arm velocity approximation (3)
-    ///   [25]   _hasBall flag (1)
-    ///   [26]   Vertical jump velocity (1)
-    ///   [27]   Is grounded flag (1)
+    ///   [25]    _hasBall flag (1)
+    ///   [26]    Vertical jump velocity (1)
+    ///   [27]    Is grounded flag (1)
+    ///   [28-30] Body position relative to episode spawn (3)
     /// </summary>
     public override void CollectObservations(VectorSensor sensor)
     {
@@ -137,18 +150,32 @@ public class ThrowAgent : Agent
         sensor.AddObservation(_hasBall ? 1f : 0f);                                              // 1
         sensor.AddObservation(_jumpVelocityY);                                                    // 1
         sensor.AddObservation(_isGrounded ? 1f : 0f);                                            // 1
-        // Total: 29
+
+        sensor.AddObservation(transform.position - _episodeSpawnPosition);                        // 3
+        // Total: 31
     }
 
     public override void OnActionReceived(ActionBuffers actions)
     {
-        float pitchDelta    = actions.ContinuousActions[0] * maxArmSpeed * Time.fixedDeltaTime;
-        float yawDelta      = actions.ContinuousActions[1] * maxArmSpeed * Time.fixedDeltaTime;
-        float rollDelta     = actions.ContinuousActions[2] * maxArmSpeed * Time.fixedDeltaTime;
-        float releaseSignal = actions.ContinuousActions[3];
-        float jumpSignal    = actions.ContinuousActions[4];
+        float moveX         = actions.ContinuousActions[0];
+        float moveZ         = actions.ContinuousActions[1];
+        float pitchDelta    = actions.ContinuousActions[2] * maxArmSpeed * Time.fixedDeltaTime;
+        float yawDelta      = actions.ContinuousActions[3] * maxArmSpeed * Time.fixedDeltaTime;
+        float rollDelta     = actions.ContinuousActions[4] * maxArmSpeed * Time.fixedDeltaTime;
+        float releaseSignal = actions.ContinuousActions[5];
+        float jumpSignal    = actions.ContinuousActions[6];
 
-        // --- Rotate arm (child transform — no Rigidbody interference) ---
+        // --- Lateral body movement ---
+        Vector3 pos = transform.position;
+        pos.x += moveX * maxBodyMoveSpeed * Time.fixedDeltaTime;
+        pos.z += moveZ * maxBodyMoveSpeed * Time.fixedDeltaTime;
+
+        // Soft penalty for wandering too far from episode spawn
+        Vector2 xzDrift = new Vector2(pos.x - _episodeSpawnPosition.x, pos.z - _episodeSpawnPosition.z);
+        if (xzDrift.magnitude > moveRadius)
+            AddReward(-0.005f);
+
+        // --- Rotate arm ---
         armTransform.Rotate(pitchDelta, yawDelta, rollDelta, Space.Self);
 
         // --- Manual jump physics ---
@@ -159,8 +186,6 @@ public class ThrowAgent : Agent
         }
 
         _jumpVelocityY += gravity * Time.fixedDeltaTime;
-
-        Vector3 pos = transform.position;
         pos.y += _jumpVelocityY * Time.fixedDeltaTime;
 
         if (pos.y <= _groundY)
@@ -185,11 +210,13 @@ public class ThrowAgent : Agent
     {
         var kb = Keyboard.current;
         var c  = actionsOut.ContinuousActions;
-        c[0] = (kb.wKey.isPressed ? 1f : 0f) - (kb.sKey.isPressed ? 1f : 0f);
-        c[1] = (kb.dKey.isPressed ? 1f : 0f) - (kb.aKey.isPressed ? 1f : 0f);
-        c[2] = (kb.eKey.isPressed ? 1f : 0f) - (kb.qKey.isPressed ? 1f : 0f);
-        c[3] = kb.fKey.isPressed ? 1f : 0f;
-        c[4] = kb.spaceKey.isPressed ? 1f : 0f;
+        c[0] = (kb.dKey.isPressed ? 1f : 0f) - (kb.aKey.isPressed ? 1f : 0f);  // A/D → bodyX
+        c[1] = (kb.wKey.isPressed ? 1f : 0f) - (kb.sKey.isPressed ? 1f : 0f);  // W/S → bodyZ
+        c[2] = 0f;  // pitch
+        c[3] = 0f;  // yaw
+        c[4] = (kb.eKey.isPressed ? 1f : 0f) - (kb.qKey.isPressed ? 1f : 0f);  // Q/E → roll
+        c[5] = kb.fKey.isPressed ? 1f : 0f;                                      // F → release
+        c[6] = kb.spaceKey.isPressed ? 1f : 0f;                                  // Space → jump
     }
 
     private void ExecuteThrow()
@@ -197,7 +224,7 @@ public class ThrowAgent : Agent
         _hasReleased = true;
         _hasBall     = false;
 
-        // Release velocity includes both arm rotation and upward body momentum from jump
+        // Release velocity includes arm rotation and body momentum
         Vector3 releaseVelocity = (handTransform.position - _prevHandPosition) / Time.fixedDeltaTime;
 
         ballRigidbody.transform.SetParent(null);
@@ -230,7 +257,7 @@ public class ThrowAgent : Agent
     public void OnScored()
     {
         GiveProximityReward();
-        AddReward(2f);   // Extra bonus for actually going through the hoop
+        AddReward(2f);
         EndEpisode();
     }
 
@@ -243,7 +270,7 @@ public class ThrowAgent : Agent
     public void OnBlockHit()
     {
         GiveProximityReward();
-        AddReward(-0.1f);  // Penalty for being blocked
+        AddReward(-0.1f);
     }
 
     public void OnEpisodeTimeout()
