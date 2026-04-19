@@ -4,19 +4,7 @@ using Unity.MLAgents.Sensors;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-/// <summary>
-/// ML-Agents throwing agent for basketball.
-///
-/// Rig hierarchy expected:
-///   Rig  (this script + BehaviorParameters + DecisionRequester)
-///   |    NO Rigidbody on root — position controlled directly
-///   ├── Base  (visual body mesh)
-///   └── Arm   (armTransform — rotates pitch/yaw/roll each step)
-///       └── Hand  (handTransform — ball attaches here)
-///
-/// Observation space: 31 floats
-/// Action space: 7 continuous (bodyX, bodyZ, pitch, yaw, roll, release, jump)
-/// </summary>
+
 public class ThrowAgent : Agent
 {
     [Header("References")]
@@ -258,13 +246,13 @@ public class ThrowAgent : Agent
     {
         GiveProximityReward();
         AddReward(2f);
-        EndEpisode();
+        // EndEpisode() — controller calls EndEpisode/EpisodeInterrupted centrally via StartNewEpisode()
     }
 
     public void OnBallOutOfBounds()
     {
         GiveProximityReward();
-        EndEpisode();
+        // EndEpisode() — controller calls EndEpisode/EpisodeInterrupted centrally via StartNewEpisode()
     }
 
     public void OnBlockHit()
@@ -276,6 +264,6 @@ public class ThrowAgent : Agent
     public void OnEpisodeTimeout()
     {
         GiveProximityReward();
-        EndEpisode();
+        // EndEpisode() — controller calls EndEpisode/EpisodeInterrupted centrally via StartNewEpisode()
     }
 }

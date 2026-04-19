@@ -4,25 +4,7 @@ using Unity.MLAgents.Sensors;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-/// <summary>
-/// ML-Agents blocking agent for basketball.
-///
-/// Controls a character body that can move laterally, jump, and swing its arm
-/// to deflect the ball before it enters the hoop.
-///
-/// Rig hierarchy expected:
-///   Rig  (this script + BehaviorParameters + DecisionRequester)
-///   |    NO Rigidbody on root — position controlled directly
-///   ├── Base  (visual body mesh)
-///   └── Arm   (armTransform — rotates pitch + yaw each step)
-///       └── Hand  (handTransform — has BoxCollider + HandCollider.cs)
-///
-/// The Hand child does NOT need a Rigidbody for collision detection;
-/// the ball Rigidbody will call OnCollisionEnter on the Hand's collider.
-///
-/// Observation space: 27 floats (see CollectObservations)
-/// Action space: 5 continuous (bodyX, bodyZ, jump, armPitch, armYaw)
-/// </summary>
+
 public class BlockAgent : Agent
 {
     [Header("References")]
@@ -92,22 +74,7 @@ public class BlockAgent : Agent
         // Reset arm
         armTransform.localRotation = _armRestLocalRotation;
     }
-
-    /// <summary>
-    /// 27 floats total:
-    ///   [0-2]  Body linearVelocity approximation (3) — always zero now; kept for obs-count compat
-    ///   [3]    Is grounded flag (1)
-    ///   [4-7]  Arm local rotation quaternion (4)
-    ///   [8-10] Hand world position (3)
-    ///   [11-13] Ball position relative to hand (3)
-    ///   [14-16] Ball linearVelocity (3)
-    ///   [17-19] Hoop position relative to body root (3)
-    ///   [20]   Ball distance to hoop (1)
-    ///   [21]   Step fraction remaining (1)
-    ///   [22]   Ball speed scalar (1)
-    ///   [23]   Ball Y delta relative to hoop Y (1)
-    ///   [24-26] Body position relative to thrower (3)
-    /// </summary>
+    
     public override void CollectObservations(VectorSensor sensor)
     {
         Vector3 handPos     = handTransform.position;
@@ -128,8 +95,8 @@ public class BlockAgent : Agent
         sensor.AddObservation(MaxStep > 0 ? 1f - StepCount / (float)MaxStep : 0f); // 1
         sensor.AddObservation(ballRigidbody.linearVelocity.magnitude);              // 1
         sensor.AddObservation(ballPos.y - hoopPos.y);                                // 1
-        sensor.AddObservation(bodyPos - throwerPos);                                 // 3 — distance/dir to thrower
-        // Total: 27
+        sensor.AddObservation(bodyPos - throwerPos);                                
+        
     }
 
     public override void OnActionReceived(ActionBuffers actions)
@@ -219,12 +186,12 @@ public class BlockAgent : Agent
     public void OnBallScored()
     {
         AddReward(-1.0f);
-        EndEpisode();
+        // EndEpisode() — controller calls EndEpisode/EpisodeInterrupted centrally via StartNewEpisode()
     }
 
     public void OnBallOutOfBounds()
     {
         // Neutral — ball missed hoop without being blocked
-        EndEpisode();
+        // EndEpisode() — controller calls EndEpisode/EpisodeInterrupted centrally via StartNewEpisode()
     }
 }

@@ -1,11 +1,6 @@
 using System.Collections;
 using UnityEngine;
 
-/// <summary>
-/// Central episode coordinator for ML-Agents basketball training.
-/// Place this on an empty GameObject in the MLTraining scene.
-/// Wire up all references in the Inspector.
-/// </summary>
 public class BasketballEnvController : MonoBehaviour
 {
     [Header("Agents")]
@@ -41,6 +36,7 @@ public class BasketballEnvController : MonoBehaviour
     private float _episodeStartTime;
     private bool _throwHasOccurred;
     private bool _episodeEnding;
+    private bool _episodeWasScored;
     private float _closestDistToHoop;
 
     /// <summary>Minimum distance the ball has reached from the hoop this episode (set after throw).</summary>
@@ -116,9 +112,18 @@ public class BasketballEnvController : MonoBehaviour
         hoopTrigger.ResetForNewEpisode();
         ResetBall();
 
-        // Ending an agent's episode triggers its OnEpisodeBegin automatically.
-        throwAgent.EpisodeInterrupted();
-        blockAgent.EpisodeInterrupted();
+        // EndEpisode for clean scores; EpisodeInterrupted for all other terminations.
+        if (_episodeWasScored)
+        {
+            throwAgent.EndEpisode();
+            blockAgent.EndEpisode();
+        }
+        else
+        {
+            throwAgent.EpisodeInterrupted();
+            blockAgent.EpisodeInterrupted();
+        }
+        _episodeWasScored = false;
     }
 
     public void ResetBall()
@@ -152,7 +157,8 @@ public class BasketballEnvController : MonoBehaviour
     private void OnHoopScore()
     {
         if (_episodeEnding) return;
-        _episodeEnding = true;
+        _episodeEnding    = true;
+        _episodeWasScored = true;
         throwAgent.OnScored();
         blockAgent.OnBallScored();
         StartCoroutine(EndEpisodeNextFrame());

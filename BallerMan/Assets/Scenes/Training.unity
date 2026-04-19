@@ -2099,6 +2099,10 @@ PrefabInstance:
       propertyPath: outOfBoundsY
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 7005099795234564882, guid: 773df93f403763e40beaf1bf7b92c0aa, type: 3}
+      propertyPath: m_Name
+      value: Hoop
+      objectReference: {fileID: 0}
     m_RemovedComponents:
     - {fileID: 6125948078310418151, guid: 773df93f403763e40beaf1bf7b92c0aa, type: 3}
     - {fileID: 4522359073758474674, guid: 773df93f403763e40beaf1bf7b92c0aa, type: 3}

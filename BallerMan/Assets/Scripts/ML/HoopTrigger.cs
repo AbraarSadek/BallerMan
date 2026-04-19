@@ -1,11 +1,7 @@
 using System;
 using UnityEngine;
 
-/// <summary>
-/// Attach to a trigger collider (thin cylinder) placed just inside the hoop rim.
-/// Fires OnScore when the ball passes through downward. Call ResetForNewEpisode()
-/// at the start of each ML-Agents episode to allow re-scoring.
-/// </summary>
+
 public class HoopTrigger : MonoBehaviour
 {
     [Tooltip("Tag used to identify the ball GameObject.")]
