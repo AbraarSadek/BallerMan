@@ -14,7 +14,9 @@ public class HoopTrigger : MonoBehaviour
     public float minDownwardVelocity = -0.5f;
 
     /// <summary>Fired once per episode when a valid score is detected.</summary>
-    public event Action OnScore;
+    public event Action OnPlayerScore;
+
+    public event Action OnComputerScore;
 
     private bool _scoredThisEpisode;
 
@@ -26,7 +28,7 @@ public class HoopTrigger : MonoBehaviour
 
     private void OnTriggerEnter(Collider other)
     {
-        if (_scoredThisEpisode) return;
+        // if (_scoredThisEpisode) return;
         if (!other.CompareTag(ballTag)) return;
 
         if (requireDownwardVelocity)
@@ -36,6 +38,14 @@ public class HoopTrigger : MonoBehaviour
         }
 
         _scoredThisEpisode = true;
-        OnScore?.Invoke();
+        Ball ballComponent = other.GetComponent<Ball>();
+        if (ballComponent != null && ballComponent.computerBall)
+        {            
+            OnComputerScore?.Invoke();
+        }
+        else
+        {
+            OnPlayerScore?.Invoke();
+        }
     }
 }
