@@ -543,14 +543,14 @@ MonoBehaviour:
   m_HapticHoverCancelDuration: 0
   m_AllowHoverHapticsWhileSelecting: 1
   m_InteractionAttachController: {fileID: 1722882099693224055}
-  m_EnableNearCasting: 1
-  m_NearInteractionCaster: {fileID: 7104419533170684624}
-  m_NearCasterSortingStrategy: 1
-  m_SortNearTargetsAfterTargetFilter: 0
-  m_EnableFarCasting: 1
-  m_FarInteractionCaster: {fileID: 1255647619390271626}
-  m_FarAttachMode: 1
-  m_EnableUIInteraction: 1
+m_EnableNearCasting: 1
+m_NearInteractionCaster: {fileID: 7104419533170684624}
+m_NearCasterSortingStrategy: 1
+m_SortNearTargetsAfterTargetFilter: 0
+m_EnableFarCasting: 0
+m_FarInteractionCaster: {fileID: 1255647619390271626}
+m_FarAttachMode: 1
+m_EnableUIInteraction: 1
   m_BlockUIOnInteractableSelection: 1
   m_UIHoverEntered:
     m_PersistentCalls:
