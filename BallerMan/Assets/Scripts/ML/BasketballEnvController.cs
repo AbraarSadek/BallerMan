@@ -1,4 +1,5 @@
 using System.Collections;
+using Unity.MLAgents;
 using UnityEngine;
 
 public class BasketballEnvController : MonoBehaviour
@@ -9,6 +10,7 @@ public class BasketballEnvController : MonoBehaviour
 
     [Header("Ball")]
     public Rigidbody ballRigidbody;
+    public GameObject ballPrefab;
     public Transform ballSpawnPoint;
 
     [Header("Hoop")]
@@ -16,7 +18,7 @@ public class BasketballEnvController : MonoBehaviour
 
     [Header("Out-of-Bounds Settings")]
     [Tooltip("Y position below which the ball is considered out of bounds (e.g. fell off the court edge).")]
-    public float outOfBoundsY = -5f;
+    public float outOfBoundsY = 0f;
     [Tooltip("XZ radius from the origin beyond which the ball is considered out of bounds.")]
     public float outOfBoundsRadius = 20f;
 
@@ -44,14 +46,14 @@ public class BasketballEnvController : MonoBehaviour
 
     private void Start()
     {
-        hoopTrigger.OnScore += OnHoopScore;
+        hoopTrigger.OnComputerScore += OnHoopScore;
         StartNewEpisode();
     }
 
     private void OnDestroy()
     {
         if (hoopTrigger != null)
-            hoopTrigger.OnScore -= OnHoopScore;
+            hoopTrigger.OnComputerScore -= OnHoopScore;
     }
 
     private void Update()
@@ -86,13 +88,14 @@ public class BasketballEnvController : MonoBehaviour
 
         bool timedOut = Time.time - _episodeStartTime > maxEpisodeDurationSeconds;
 
+        // Debug.Log($"OutOfBounds: {outOfBounds}, HitGround: {hitGround}, Diverging: {diverging}, TimedOut: {timedOut}");
         if (outOfBounds || hitGround || diverging || timedOut)
         {
             _episodeEnding = true;
             if (_throwHasOccurred)
             {
                 throwAgent.OnBallOutOfBounds();
-                blockAgent.OnBallOutOfBounds();
+                // blockAgent.OnBallOutOfBounds();
             }
             else
             {
@@ -116,32 +119,43 @@ public class BasketballEnvController : MonoBehaviour
         if (_episodeWasScored)
         {
             throwAgent.EndEpisode();
-            blockAgent.EndEpisode();
+            // blockAgent.EndEpisode();
         }
         else
         {
             throwAgent.EpisodeInterrupted();
-            blockAgent.EpisodeInterrupted();
+            // blockAgent.EpisodeInterrupted();
         }
         _episodeWasScored = false;
     }
 
     public void ResetBall()
     {
-        // Must be non-kinematic before zeroing velocity; ThrowAgent holds ball kinematic.
-        ballRigidbody.isKinematic     = false;
-        ballRigidbody.linearVelocity  = Vector3.zero;
-        ballRigidbody.angularVelocity = Vector3.zero;
-        ballRigidbody.transform.SetParent(null);
-        ballRigidbody.transform.position = ballSpawnPoint.position;
-        ballRigidbody.transform.rotation = Quaternion.identity;
+        if (!Academy.Instance.IsCommunicatorOn && ballPrefab != null)
+        {
+            GameObject newBall = Instantiate(ballPrefab, ballSpawnPoint.position, Quaternion.identity);
+            ballRigidbody = newBall.GetComponent<Rigidbody>();
+            throwAgent.ballRigidbody = ballRigidbody;
+            Ball ballComponent = newBall.GetComponent<Ball>();
+            if (ballComponent != null)             ballComponent.computerBall = true;
+        }
+        else
+        {
+            // Training mode: reuse the existing ball.
+            ballRigidbody.isKinematic     = false;
+            ballRigidbody.linearVelocity  = Vector3.zero;
+            ballRigidbody.angularVelocity = Vector3.zero;
+            ballRigidbody.transform.SetParent(null);
+            ballRigidbody.transform.position = ballSpawnPoint.position;
+            ballRigidbody.transform.rotation = Quaternion.identity;
+        }
     }
 
     /// <summary>Called by ThrowAgent when it releases the ball.</summary>
     public void NotifyThrowOccurred()
     {
         _throwHasOccurred = true;
-        blockAgent.OnThrowOccurred();
+        // blockAgent.OnThrowOccurred();
     }
 
     /// <summary>Called by BlockAgent when its paddle touches the ball.</summary>
@@ -160,7 +174,7 @@ public class BasketballEnvController : MonoBehaviour
         _episodeEnding    = true;
         _episodeWasScored = true;
         throwAgent.OnScored();
-        blockAgent.OnBallScored();
+        // blockAgent.OnBallScored();
         StartCoroutine(EndEpisodeNextFrame());
     }
 
