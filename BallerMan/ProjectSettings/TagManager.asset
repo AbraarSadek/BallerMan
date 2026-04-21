@@ -6,6 +6,7 @@ TagManager:
   tags:
   - Basketball
   - Ball
+  - PlayerBall
   layers:
   - Default
   - TransparentFX
