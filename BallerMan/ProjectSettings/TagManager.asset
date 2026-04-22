@@ -5,8 +5,8 @@ TagManager:
   serializedVersion: 3
   tags:
   - Basketball
-  - Ball
-  - PlayerBall
+  - Playerball
+  - ball
   layers:
   - Default
   - TransparentFX

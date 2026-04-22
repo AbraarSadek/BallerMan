@@ -1,11 +1,14 @@
 using UnityEngine;
 using TMPro;
+using UnityEngine.SceneManagement;
 
 public class CountdownTimer : MonoBehaviour
 {
     public TextMeshPro timerText;
     public float timeRemaining = 60f;
     public bool timerRunning = true;
+
+    public string endSceneName = "End Game";
 
     void Update()
     {
@@ -21,6 +24,8 @@ public class CountdownTimer : MonoBehaviour
                 timeRemaining = 0;
                 timerRunning = false;
                 timerText.text = "TIME UP!";
+
+                SceneManager.LoadScene(endSceneName);
             }
         }
     }
