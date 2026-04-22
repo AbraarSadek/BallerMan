@@ -7,6 +7,8 @@ TagManager:
   - Basketball
   - Playerball
   - ball
+  - Ball
+  - Hand
   layers:
   - Default
   - TransparentFX
